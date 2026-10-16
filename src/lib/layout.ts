@@ -1,13 +1,18 @@
-import { type Bracket, type Match, type Side, EXTRA_FINAL_CUPS, GF1, GF2, roundName } from './bracket'
+import { type Bracket, type Match, type Side, EXTRA_FINAL_CUPS, GF1, GF2, effectiveSource, roundName } from './bracket'
 
-export const MATCH_W = 290
-export const MATCH_H = 116
-export const MATCH_HEAD = 28
+export const MATCH_W = 250
+export const MATCH_H = 112
+export const MATCH_HEAD = 24
 export const MATCH_ROW = 44
-const COL_GAP = 56
-const ROW_GAP = 22
-const HEADER_H = 56
-const SECTION_GAP = 90
+const COL_GAP = 34
+const ROW_GAP = 14
+/** Abschnittstitel „Winner Bracket“ / „Loser Bracket“ */
+const TITLE_H = 48
+/** Rundenüberschrift über den Spalten */
+const HEADER_H = 32
+const SECTION_GAP = 40
+/** Abstand Grand Final → Extra-Finale (darunter) */
+const FINAL_GAP = 56
 
 export interface Box {
   x: number
@@ -31,78 +36,82 @@ export interface BracketLayout {
 
 /**
  * Berechnet Positionen: Winner Bracket oben, Loser Bracket darunter,
- * Grand Final rechts. WB-Runde r steht über der LB-Runde, in die ihre
- * Verlierer fallen, damit der Baum kompakt bleibt.
+ * Grand Final rechts, Extra-Finale darunter. WB-Runde r steht über der
+ * LB-Runde, in die ihre Verlierer fallen. Ausgeblendete Freilos-Matches
+ * belegen weder Zeilen noch Spalten, damit der Baum möglichst groß wird.
  */
 export function layoutBracket(bracket: Bracket, hidden: Set<string>): BracketLayout {
   const pos: Record<string, Box> = {}
+  const byId = new Map(bracket.matches.map((m) => [m.id, m]))
   const step = MATCH_W + COL_GAP
-  const byRound = (side: Side, round: number) =>
-    bracket.matches.filter((m) => m.side === side && m.round === round).sort((a, b) => a.index - b.index)
-  const center = (ids: string[]) => {
-    const ys = ids.map((id) => pos[id].y)
-    return (Math.min(...ys) + Math.max(...ys)) / 2
-  }
-  const feeders = (m: Match) => m.sources.flatMap((s) => (s.type === 'winner' ? [s.match] : []))
+  const rowStep = MATCH_H + ROW_GAP
 
   const wbCol = (r: number) => (bracket.lbRounds === 0 || r === 1 ? 0 : 2 * r - 3)
   const lbCol = (r: number) => r - 1
+  const colOf = (m: Match) => (m.side === 'W' ? wbCol(m.round) : lbCol(m.round))
 
-  // Winner Bracket
-  const wbTop = HEADER_H + 46
-  for (let r = 1; r <= bracket.wbRounds; r++) {
-    for (const m of byRound('W', r)) {
-      const y = r === 1 ? wbTop + m.index * (MATCH_H + ROW_GAP) : center(feeders(m))
-      pos[m.id] = { x: wbCol(r) * step, y }
+  /** Sichtbare Vorgänger-Matches derselben Seite (durch Freilose hindurch) */
+  const kids = (m: Match): Match[] =>
+    m.sources.flatMap((s) => {
+      const src = effectiveSource(bracket, s, hidden)
+      if (src.type !== 'winner') return []
+      const k = byId.get(src.match)!
+      return k.side === m.side && !hidden.has(k.id) ? [k] : []
+    })
+
+  /** Baum von der Wurzel aus legen: Blätter bekommen fortlaufende Zeilen */
+  const placeTree = (root: Match, top: number) => {
+    let slot = 0
+    const place = (m: Match): number => {
+      const ys = kids(m).map(place)
+      const y = ys.length === 0 ? top + slot++ * rowStep : (Math.min(...ys) + Math.max(...ys)) / 2
+      pos[m.id] = { x: colOf(m) * step, y }
+      return y
     }
-  }
-  const wbBottom = Math.max(...bracket.matches.filter((m) => m.side === 'W').map((m) => pos[m.id].y)) + MATCH_H
-
-  // Loser Bracket
-  const lbTop = wbBottom + SECTION_GAP + HEADER_H + 46
-  for (let r = 1; r <= bracket.lbRounds; r++) {
-    for (const m of byRound('L', r)) {
-      let y: number
-      if (r === 1) y = lbTop + m.index * (MATCH_H + ROW_GAP)
-      else {
-        const f = feeders(m)
-        y = center(f)
-      }
-      pos[m.id] = { x: lbCol(r) * step, y }
-    }
+    place(root)
+    return top + Math.max(1, slot) * rowStep - ROW_GAP
   }
 
-  const visibleIds = bracket.matches.filter((m) => !hidden.has(m.id)).map((m) => m.id)
+  const wbFinal = byId.get(`W${bracket.wbRounds}-0`)!
+  const wbTop = TITLE_H + HEADER_H
+  const wbBottom = placeTree(wbFinal, wbTop)
 
-  const lastCol = Math.max(wbCol(bracket.wbRounds), bracket.lbRounds > 0 ? lbCol(bracket.lbRounds) : 0)
-  const wbFinal = `W${bracket.wbRounds}-0`
-  const lbFinal = bracket.lbRounds > 0 ? `L${bracket.lbRounds}-0` : wbFinal
-  const gfY = bracket.lbRounds > 0 ? (pos[wbFinal].y + pos[lbFinal].y) / 2 : pos[wbFinal].y
-  pos[GF1] = { x: (lastCol + 1) * step + 40, y: gfY }
-  pos[GF2] = { x: (lastCol + 2) * step + 40, y: gfY }
+  let lbTop = wbBottom
+  let lbFinal: Match | null = null
+  if (bracket.lbRounds > 0) {
+    lbFinal = byId.get(`L${bracket.lbRounds}-0`)!
+    lbTop = wbBottom + SECTION_GAP + TITLE_H + HEADER_H
+    placeTree(lbFinal, lbTop)
+  }
 
-  // Spalten ohne sichtbare Matches (nur Freilose) entfernen
+  // Spalten ohne sichtbare Matches entfernen, dann Finale rechts anhängen
+  const visibleIds = bracket.matches.filter((m) => !hidden.has(m.id) && m.side !== 'GF' && pos[m.id]).map((m) => m.id)
   const usedX = [...new Set(visibleIds.map((id) => pos[id].x))].sort((a, b) => a - b)
-  const remap = new Map(usedX.map((x, i) => [x, i * step + (x >= pos[GF1].x ? 40 : 0)]))
-  for (const id of Object.keys(pos)) pos[id] = { ...pos[id], x: remap.get(pos[id].x) ?? pos[id].x }
+  const remap = new Map(usedX.map((x, i) => [x, i * step]))
+  for (const id of visibleIds) pos[id] = { ...pos[id], x: remap.get(pos[id].x)! }
+
+  const gfX = usedX.length * step + 24
+  const gfY = lbFinal ? (pos[wbFinal.id].y + pos[lbFinal.id].y) / 2 : pos[wbFinal.id].y
+  pos[GF1] = { x: gfX, y: gfY }
+  pos[GF2] = { x: gfX, y: gfY + MATCH_H + FINAL_GAP }
 
   const headers: ColumnHeader[] = []
-  const visibleRound = (side: Side, r: number) => byRound(side, r).find((m) => !hidden.has(m.id))
-  for (let r = 1; r <= bracket.wbRounds; r++) {
-    const m = visibleRound('W', r)
-    if (m) headers.push({ x: pos[m.id].x, y: HEADER_H, text: roundName(bracket, 'W', r), side: 'W' })
+  const seen = new Set<string>()
+  for (const m of bracket.matches) {
+    if (m.side === 'GF' || hidden.has(m.id) || !pos[m.id]) continue
+    const key = `${m.side}${m.round}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    headers.push({ x: pos[m.id].x, y: (m.side === 'W' ? wbTop : lbTop) - HEADER_H, text: roundName(bracket, m.side, m.round), side: m.side })
   }
-  for (let r = 1; r <= bracket.lbRounds; r++) {
-    const m = visibleRound('L', r)
-    if (m) headers.push({ x: pos[m.id].x, y: lbTop - 46, text: roundName(bracket, 'L', r), side: 'L' })
-  }
-  headers.push({ x: pos[GF1].x, y: gfY - 46, text: 'Grand Final', side: 'GF' })
-  if (!hidden.has(GF2)) headers.push({ x: pos[GF2].x, y: gfY - 46, text: `Extra-Finale · ${EXTRA_FINAL_CUPS} Cups`, side: 'GF' })
+  headers.push({ x: gfX, y: gfY - HEADER_H, text: 'Grand Final', side: 'GF' })
+  if (!hidden.has(GF2)) headers.push({ x: gfX, y: pos[GF2].y - HEADER_H, text: `Extra-Finale · ${EXTRA_FINAL_CUPS} Cups`, side: 'GF' })
 
   const sections = [{ side: 'W' as Side, y: 0, title: 'Winner Bracket' }]
-  if (bracket.lbRounds > 0) sections.push({ side: 'L', y: lbTop - 46 - HEADER_H, title: 'Loser Bracket' })
+  if (lbFinal) sections.push({ side: 'L', y: lbTop - HEADER_H - TITLE_H, title: 'Loser Bracket' })
 
-  const width = Math.max(...visibleIds.map((id) => pos[id].x)) + MATCH_W + 20
-  const height = Math.max(...visibleIds.map((id) => pos[id].y)) + MATCH_H + 20
+  const shown = [...visibleIds, GF1, ...(hidden.has(GF2) ? [] : [GF2])]
+  const width = Math.max(...shown.map((id) => pos[id].x)) + MATCH_W + 8
+  const height = Math.max(...shown.map((id) => pos[id].y)) + MATCH_H + 8
   return { pos, headers, sections, width, height }
 }

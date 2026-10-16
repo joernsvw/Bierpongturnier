@@ -118,13 +118,24 @@ export function BracketView({ bracket, state, name, onOpen, tableOf, nextIds, hi
       m.sources.forEach((src, slot) => {
         src = effectiveSource(bracket, src, byes)
         if (src.type !== 'winner' || hidden.has(src.match)) return
+        if (m.id === GF2) {
+          // Extra-Finale liegt direkt unter dem Grand Final: senkrechte Verbindung
+          const gf = layout.pos[src.match]
+          const x = gf.x + MATCH_W / 2
+          out.push({
+            d: `M${x},${gf.y + MATCH_H} V${layout.pos[GF2].y}`,
+            hot: highlightPath.has(src.match) && highlightPath.has(m.id),
+            color: state.byId[src.match].status === 'done' ? sideColor.GF : 'var(--color-line)',
+          })
+          return
+        }
         const from = layout.pos[src.match]
         const to = layout.pos[m.id]
         const srcMatch = state.byId[src.match]
         const x1 = from.x + MATCH_W
         const y1 = from.y + MATCH_H / 2
         const x2 = to.x
-        const y2 = to.y + (m.id === GF2 ? MATCH_H / 2 : MATCH_HEAD + MATCH_ROW / 2 + slot * MATCH_ROW)
+        const y2 = to.y + MATCH_HEAD + MATCH_ROW / 2 + slot * MATCH_ROW
         const mx = x1 + Math.max(24, (x2 - x1) / 2)
         const hot = highlightPath.has(src.match) && highlightPath.has(m.id)
         out.push({
