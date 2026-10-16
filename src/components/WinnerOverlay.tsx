@@ -1,7 +1,7 @@
 import confetti from 'canvas-confetti'
 import { useEffect, useRef } from 'react'
 
-export function WinnerOverlay({ name, members, onClose }: { name: string; members?: string; onClose: () => void }) {
+export function WinnerOverlay({ title, name, members, onClose }: { title: string; name: string; members?: string; onClose: () => void }) {
   // Ref statt Abhängigkeit, damit das Konfetti nicht bei jedem Render neu startet
   const closeRef = useRef(onClose)
   closeRef.current = onClose
@@ -32,7 +32,7 @@ export function WinnerOverlay({ name, members, onClose }: { name: string; member
     <div className="fixed inset-0 z-40 flex cursor-pointer flex-col items-center justify-center bg-[#021008]/90 fade-in" onClick={onClose}>
       <div className="pop-in text-center">
         <div className="text-[200px] leading-none drop-shadow-[0_0_60px_rgba(245,194,66,0.6)]">🏆</div>
-        <div className="font-display mt-6 text-6xl text-muted">Turniersieger</div>
+        <div className="font-display mt-6 text-6xl text-muted">{title}</div>
         <div className="font-display mt-4 px-10 text-[150px] leading-[0.9] text-beer drop-shadow-[0_0_40px_rgba(245,194,66,0.45)]">
           {name}
         </div>

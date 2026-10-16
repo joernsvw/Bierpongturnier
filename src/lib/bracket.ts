@@ -244,16 +244,22 @@ export function generateBracket(entrants: readonly string[], opts: GenerateOptio
     ],
   })
 
-  // Labels: fortlaufend je Seite
-  let w = 0
-  let l = 0
-  for (const m of matches) {
-    if (m.side === 'W') m.label = `W${++w}`
-    else if (m.side === 'L') m.label = `L${++l}`
-    else m.label = m.id === GF1 ? 'GF' : 'GF2'
-  }
+  return labelMatches({ size, seeds, wbRounds, lbRounds, matches })
+}
 
-  return { size, seeds, wbRounds, lbRounds, matches }
+/**
+ * Spielnummern: fortlaufend in empfohlener Spielreihenfolge. Freilos-Matches
+ * bekommen keine Nummer (sie werden nie gespielt und nicht angezeigt).
+ */
+export function labelMatches(bracket: Bracket): Bracket {
+  const byes = structuralByes(bracket)
+  let nr = 0
+  for (const m of [...bracket.matches].sort(compareMatches)) {
+    if (m.id === GF1) m.label = 'Finale'
+    else if (m.id === GF2) m.label = 'Finale 2'
+    else m.label = byes.has(m.id) ? 'Freilos' : `Spiel ${++nr}`
+  }
+  return bracket
 }
 
 /**

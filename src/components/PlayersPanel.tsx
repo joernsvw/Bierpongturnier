@@ -3,8 +3,12 @@ import * as S from '../lib/state'
 import type { Store } from '../lib/useStore'
 import { useConfirm } from './Modal'
 
-export function PlayersPanel({ store, locked }: { store: Store; locked: boolean }) {
+export function PlayersPanel({ store }: { store: Store }) {
   const { state, commit } = store
+  // Spieler in laufenden Turnieren dürfen nicht gelöscht werden
+  const inPlay = S.lockedPlayers(state)
+  const doubleRunning = state.tournaments.double !== null
+  const singleRunning = state.tournaments.single !== null
   const confirm = useConfirm()
   const [name, setName] = useState('')
   const [editing, setEditing] = useState<string | null>(null)
@@ -32,21 +36,6 @@ export function PlayersPanel({ store, locked }: { store: Store; locked: boolean 
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-4">
-      <div className="flex rounded-xl border border-line bg-bg/60 p-1">
-        {(['single', 'double'] as const).map((m) => (
-          <button
-            key={m}
-            disabled={locked}
-            onClick={() => commit((s) => ({ ...s, mode: m }), `Modus ${m === 'single' ? 'Einzel' : 'Doppel'}`)}
-            className={`flex-1 rounded-lg py-2.5 text-xl font-bold transition disabled:cursor-not-allowed ${
-              state.mode === m ? 'bg-club text-white' : 'text-muted hover:text-text'
-            }`}
-          >
-            {m === 'single' ? 'Einzel' : 'Doppel'}
-          </button>
-        ))}
-      </div>
-
       <div className="flex gap-2">
         <input
           className="input text-xl"
@@ -54,19 +43,22 @@ export function PlayersPanel({ store, locked }: { store: Store; locked: boolean 
           value={name}
           onChange={(e) => setName(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && add()}
-          disabled={locked}
         />
         <button className="btn btn-primary text-xl" onClick={add} disabled={!name.trim()}>
           +
         </button>
       </div>
-      {locked && (
-        <p className="text-sm text-muted">Turnier läuft: Spieler können nur umbenannt werden.</p>
+      {inPlay.size > 0 && (
+        <p className="text-sm text-muted">Spieler in einem laufenden Turnier können umbenannt, aber nicht gelöscht werden.</p>
       )}
 
       <div className="flex items-center justify-between text-muted">
         <span className="text-lg font-semibold">{state.players.length} Spieler</span>
-        {state.mode === 'double' && state.paused.length > 0 && <span>{state.paused.length} pausiert</span>}
+        <span className="text-base">
+          {state.paused.length > 0 && `${state.paused.length} pausiert (Doppel)`}
+          {state.paused.length > 0 && state.singleOut.length > 0 && ' · '}
+          {state.singleOut.length > 0 && `${state.singleOut.length} ohne Einzel`}
+        </span>
       </div>
 
       <ul className="-mr-2 min-h-0 flex-1 space-y-1.5 overflow-y-auto pr-2">
@@ -100,21 +92,32 @@ export function PlayersPanel({ store, locked }: { store: Store; locked: boolean 
                   {p.name}
                 </button>
               )}
-              {state.mode === 'double' && team && <span className="text-sm font-bold text-wb" title="Ist in einem Team">✓ Team</span>}
-              {state.mode === 'double' && paused && <span className="text-sm font-bold text-lb">Pause</span>}
-              {!locked && editing !== p.id && (
+              {team && <span className="text-sm font-bold text-wb" title="Ist in einem Doppel-Team">✓ Team</span>}
+              {paused && <span className="text-sm font-bold text-lb" title="Setzt bei der Doppel-Auslosung aus">Pause</span>}
+              {state.singleOut.includes(p.id) && <span className="text-sm font-bold text-muted" title="Spielt nicht im Einzel">kein Einzel</span>}
+              {editing !== p.id && (
                 <div className="hidden group-hover:flex">
                   <IconBtn title="Nach oben" onClick={() => commit((s) => S.movePlayer(s, p.id, -1), 'Reihenfolge geändert')}>↑</IconBtn>
                   <IconBtn title="Nach unten" onClick={() => commit((s) => S.movePlayer(s, p.id, 1), 'Reihenfolge geändert')}>↓</IconBtn>
-                  {state.mode === 'double' && (
+                  {!singleRunning && (
                     <IconBtn
-                      title={paused ? 'Wieder mitspielen' : 'Pausieren'}
+                      title={state.singleOut.includes(p.id) ? 'Spielt im Einzel mit' : 'Nicht im Einzel'}
+                      onClick={() => commit((s) => S.toggleSingleOut(s, p.id), 'Einzel-Teilnahme geändert')}
+                    >
+                      {state.singleOut.includes(p.id) ? '①' : '1'}
+                    </IconBtn>
+                  )}
+                  {!doubleRunning && (
+                    <IconBtn
+                      title={paused ? 'Wieder mitspielen (Doppel)' : 'Bei der Doppel-Auslosung pausieren'}
                       onClick={() => commit((s) => S.togglePaused(s, p.id), paused ? 'Pause aufgehoben' : 'Spieler pausiert')}
                     >
                       {paused ? '▶' : '⏸'}
                     </IconBtn>
                   )}
-                  <IconBtn title="Löschen" danger onClick={() => remove(p)}>✕</IconBtn>
+                  {!inPlay.has(p.id) && (
+                    <IconBtn title="Löschen" danger onClick={() => remove(p)}>✕</IconBtn>
+                  )}
                 </div>
               )}
             </li>

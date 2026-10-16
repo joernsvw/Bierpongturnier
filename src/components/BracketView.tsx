@@ -17,7 +17,8 @@ interface Props {
   state: TournamentState
   name: (id: string | null) => string
   onOpen: (matchId: string) => void
-  nowId: string | null
+  /** Match-ID → Tischnummer (1-basiert) */
+  tableOf: Map<string, number>
   nextIds: Set<string>
   highlightPath: Set<string>
   /** wechselt, wenn neu eingepasst werden soll (z. B. Präsentationsmodus) */
@@ -28,7 +29,7 @@ interface Props {
 
 const sideColor = { W: 'var(--color-wb)', L: 'var(--color-lb)', GF: 'var(--color-beer)' }
 
-export function BracketView({ bracket, state, name, onOpen, nowId, nextIds, highlightPath, fitKey, showReset, controls }: Props) {
+export function BracketView({ bracket, state, name, onOpen, tableOf, nextIds, highlightPath, fitKey, showReset, controls }: Props) {
   // Freilos-Matches werden nie gespielt und deshalb nicht gezeigt
   const byes = useMemo(() => structuralByes(bracket), [bracket])
   const hidden = useMemo(() => {
@@ -198,7 +199,7 @@ export function BracketView({ bracket, state, name, onOpen, nowId, nextIds, high
                 name={name}
                 x={layout.pos[st.match.id].x}
                 y={layout.pos[st.match.id].y}
-                isNow={nowId === st.match.id}
+                table={tableOf.get(st.match.id)}
                 isNext={nextIds.has(st.match.id)}
                 onPath={highlightPath.has(st.match.id)}
                 onOpen={handleOpen}
@@ -235,7 +236,7 @@ function MatchCard({
   name,
   x,
   y,
-  isNow,
+  table,
   isNext,
   onPath,
   onOpen,
@@ -246,12 +247,13 @@ function MatchCard({
   name: (id: string | null) => string
   x: number
   y: number
-  isNow: boolean
+  table: number | undefined
   isNext: boolean
   onPath: boolean
   onOpen: (id: string) => void
 }) {
   const { match, status } = st
+  const isNow = table !== undefined
   const color = sideColor[match.side]
   const clickable = status === 'ready' || status === 'done'
   const dim = status === 'bye' || status === 'skipped'
@@ -313,7 +315,7 @@ function MatchCard({
       <div className="flex items-center justify-between px-3 text-[15px] font-bold uppercase tracking-wider" style={{ height: MATCH_HEAD, background: `color-mix(in srgb, ${color} 18%, transparent)` }}>
         <span style={{ color }}>{match.label}</span>
         <span className={isNow ? 'text-beer' : isNext ? 'text-beer/80' : 'text-muted'}>
-          {isNow ? '● Jetzt' : isNext ? 'Als Nächstes' : status === 'done' ? 'Fertig' : status === 'bye' ? 'Freilos' : status === 'skipped' ? 'nicht nötig' : ''}
+          {isNow ? `● Tisch ${table}` : isNext ? 'Als Nächstes' : status === 'done' ? 'Fertig' : status === 'bye' ? 'Freilos' : status === 'skipped' ? 'nicht nötig' : ''}
         </span>
       </div>
       {row(st.a, 0)}

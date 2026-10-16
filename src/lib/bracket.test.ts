@@ -297,3 +297,22 @@ describe('Freilos-Struktur', () => {
     }
   })
 })
+
+describe('Spielnummern', () => {
+  it('sind lückenlos fortlaufend und in Spielreihenfolge', () => {
+    for (const n of SIZES) {
+      const bracket = generateBracket(teams(n), { seeding: 'order' })
+      const numbered = bracket.matches.filter((m) => m.label.startsWith('Spiel '))
+      const nums = numbered.map((m) => Number(m.label.slice(6))).sort((a, b) => a - b)
+      // 2n-3 Matches vor dem Finale (ohne Freilose)
+      expect(nums).toEqual(Array.from({ length: 2 * n - 3 }, (_, i) => i + 1))
+      // Ein Match kommt nie vor einem Match, aus dem es gespeist wird
+      const nrOf = new Map(numbered.map((m) => [m.id, Number(m.label.slice(6))]))
+      for (const m of numbered) {
+        for (const src of m.sources) {
+          if (src.type !== 'seed' && nrOf.has(src.match)) expect(nrOf.get(src.match)!).toBeLessThan(nrOf.get(m.id)!)
+        }
+      }
+    }
+  })
+})

@@ -29,6 +29,13 @@ export function useStore() {
     setHistory((h) => [...h.slice(-(MAX_HISTORY - 1)), { state: prev, label }])
   }, [])
 
+  /** Änderung ohne Undo-Eintrag (z. B. Ansicht wechseln) */
+  const update = useCallback((fn: (s: AppState) => AppState) => {
+    const value = fn(stateRef.current)
+    stateRef.current = value
+    setState(value)
+  }, [])
+
   const undo = useCallback(() => {
     setHistory((h) => {
       if (h.length === 0) return h
@@ -42,6 +49,7 @@ export function useStore() {
   return {
     state,
     commit,
+    update,
     undo,
     canUndo: history.length > 0,
     undoLabel: history[history.length - 1]?.label,

@@ -1,16 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { computeStats, readyMatches, structuralByes, waitingMatches, winningPath } from './lib/bracket'
 import * as S from './lib/state'
+import { interleave } from './lib/tables'
 import { useDraw } from './lib/useDraw'
 import { useStore } from './lib/useStore'
 import { BracketView } from './components/BracketView'
 import { MatchModal } from './components/MatchModal'
 import { ConfirmProvider, Modal, useConfirm } from './components/Modal'
 import { PlayersPanel } from './components/PlayersPanel'
-import { SetupStage } from './components/SetupStage'
+import { SetupStage, TablesSelect } from './components/SetupStage'
 import { StatsPanel } from './components/StatsPanel'
 import { TeamsPanel } from './components/TeamsPanel'
-import { UpNext } from './components/UpNext'
+import { type MatchItem, UpNext } from './components/UpNext'
 import { WinnerOverlay } from './components/WinnerOverlay'
 
 export default function App() {
@@ -25,25 +26,73 @@ type Tab = 'players' | 'teams' | 'stats'
 
 function Main() {
   const store = useStore()
-  const { state, commit, undo, canUndo, undoLabel } = store
+  const { state, commit, update, undo, canUndo, undoLabel } = store
   const draw = useDraw(store)
   const confirm = useConfirm()
 
+  const mode = state.mode
   const [presentation, setPresentation] = useState(false)
   const [collapsed, setCollapsed] = useState(false)
-  const [tab, setTab] = useState<Tab>(state.tournament ? 'stats' : 'players')
-  const [openMatch, setOpenMatch] = useState<string | null>(null)
-  const [showWinner, setShowWinner] = useState(false)
+  const [tab, setTab] = useState<Tab>(state.tournaments[mode] ? 'stats' : 'players')
+  const [openMatch, setOpenMatch] = useState<{ mode: S.Mode; id: string } | null>(null)
+  const [showWinner, setShowWinner] = useState<S.Mode | null>(null)
   const [showSettings, setShowSettings] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
-  const t = state.tournament
-  const tstate = useMemo(() => S.tournamentState(state), [state])
+  // Beide Turniere werden immer ausgewertet (Tische sind gemeinsam)
+  const tstates = useMemo(
+    () => ({ single: S.tournamentState(state, 'single'), double: S.tournamentState(state, 'double') }),
+    [state],
+  )
+  const t = state.tournaments[mode]
+  const tstate = tstates[mode]
   const stats = useMemo(() => (t && tstate ? computeStats(t.bracket, tstate) : null), [t, tstate])
-  const ready = useMemo(() => (tstate ? readyMatches(tstate) : []), [tstate])
-  const waiting = useMemo(() => (tstate ? waitingMatches(tstate) : []), [tstate])
   const name = useCallback((id: string | null) => S.entrantName(state, id), [state])
-  const locked = t !== null
+  const bothRunning = S.MODES.every((m) => state.tournaments[m] !== null)
+  const anyRunning = S.MODES.some((m) => state.tournaments[m] !== null)
+
+  // --- Tische und Warteschlange (über beide Turniere) -----------------------
+  const { tableItems, queue, tableOf, nextIds } = useMemo(() => {
+    const item = (m: S.Mode, id: string): MatchItem | null => {
+      const ts = tstates[m]
+      const tt = state.tournaments[m]
+      return ts && tt && ts.byId[id] ? { mode: m, st: ts.byId[id], bracket: tt.bracket } : null
+    }
+    const tableItems = Array.from({ length: state.settings.tables }, (_, i) => {
+      const key = state.tables[i]
+      if (!key) return null
+      const { mode: m, matchId } = S.parseTableKey(key)
+      return item(m, matchId)
+    })
+    const onTable = new Set(state.tables.filter(Boolean))
+    const busy = new Set(tableItems.flatMap((it) => (it ? S.matchPlayers(state, it.mode, it.st.a, it.st.b) : [])))
+    const withBlocked = (it: MatchItem): MatchItem => ({
+      ...it,
+      blocked: S.matchPlayers(state, it.mode, it.st.a, it.st.b).some((p) => busy.has(p)),
+    })
+    const readyOf = (m: S.Mode) =>
+      tstates[m]
+        ? readyMatches(tstates[m]!)
+            .map((st) => withBlocked(item(m, st.match.id)!))
+            .filter((it) => !onTable.has(S.tableKey(m, it.st.match.id)))
+        : []
+    const waitingOf = (m: S.Mode) => (tstates[m] ? waitingMatches(tstates[m]!).map((st) => item(m, st.match.id)!) : [])
+    const ready = interleave(readyOf('double'), readyOf('single'))
+    // Wer sofort an einen freien Tisch könnte, steht vorne
+    const queue = [...ready.filter((it) => !it.blocked), ...ready.filter((it) => it.blocked), ...interleave(waitingOf('double'), waitingOf('single'))]
+
+    const tableOf = new Map<string, number>()
+    tableItems.forEach((it, i) => it && it.mode === mode && tableOf.set(it.st.match.id, i + 1))
+    const nextIds = new Set(
+      queue
+        .filter((it) => it.mode === mode && it.st.status === 'ready')
+        .slice(0, 2)
+        .map((it) => it.st.match.id),
+    )
+    return { tableItems, queue, tableOf, nextIds }
+  }, [state, tstates, mode])
+
+  const champions = S.MODES.flatMap((m) => (tstates[m]?.champion ? [{ mode: m, name: name(tstates[m]!.champion) }] : []))
 
   // Siegerpfad: am Ende der Weg des Champions
   const path = useMemo(() => (tstate?.champion ? winningPath(tstate, tstate.champion) : new Set<string>()), [tstate])
@@ -57,11 +106,18 @@ function Main() {
 
   // Siegerehrung automatisch zeigen, sobald durch ein eingetragenes Ergebnis ein Champion feststeht
   // (nicht nach Undo, Import oder Reload)
-  const resultSaved = useRef(false)
+  const resultSaved = useRef<S.Mode | null>(null)
   useEffect(() => {
-    if (resultSaved.current && tstate?.champion) setShowWinner(true)
-    resultSaved.current = false
-  }, [tstate?.champion])
+    const m = resultSaved.current
+    if (m && tstates[m]?.champion) setShowWinner(m)
+    resultSaved.current = null
+  }, [tstates])
+
+  const switchMode = (m: S.Mode) => {
+    if (m === mode) return
+    update((s) => ({ ...s, mode: m }))
+    setTab(state.tournaments[m] ? 'stats' : m === 'double' ? 'teams' : 'players')
+  }
 
   // --- Präsentationsmodus / Tastatur ----------------------------------------
   const togglePresentation = useCallback(() => {
@@ -99,18 +155,19 @@ function Main() {
   }, [togglePresentation, undo, presentation, openMatch, showSettings])
 
   // --- Turnier-Aktionen ------------------------------------------------------
+  const label = S.MODE_LABEL[mode]
   const resetTournament = async () => {
-    if (await confirm({ title: 'Turnier zurücksetzen?', message: 'Alle Ergebnisse werden gelöscht. Der Turnierbaum und die Paarungen bleiben erhalten.', confirmLabel: 'Ergebnisse löschen', danger: true }))
-      commit((s) => S.withResults(s, {}), 'Turnier zurückgesetzt')
+    if (await confirm({ title: `${label} zurücksetzen?`, message: 'Alle Ergebnisse dieses Turniers werden gelöscht. Der Turnierbaum und die Paarungen bleiben erhalten.', confirmLabel: 'Ergebnisse löschen', danger: true }))
+      commit((s) => S.withResults(s, {}), `${label} zurückgesetzt`)
   }
   const newTournament = async () => {
-    if (await confirm({ title: 'Neues Turnier erstellen?', message: 'Der aktuelle Turnierbaum samt Ergebnissen wird verworfen. Spieler und Teams bleiben erhalten.', confirmLabel: 'Turnier verwerfen', danger: true })) {
-      commit((s) => ({ ...s, tournament: null }), 'Turnier verworfen')
-      setTab(state.mode === 'double' ? 'teams' : 'players')
+    if (await confirm({ title: `${label} neu erstellen?`, message: 'Der Turnierbaum samt Ergebnissen wird verworfen. Spieler und Teams bleiben erhalten.', confirmLabel: 'Turnier verwerfen', danger: true })) {
+      commit((s) => S.discardTournament(s), `${label} verworfen`)
+      setTab(mode === 'double' ? 'teams' : 'players')
     }
   }
   const wipeAll = async () => {
-    if (await confirm({ title: 'Alles löschen?', message: 'Spieler, Teams und Turnier werden komplett gelöscht. (Rückgängig ist möglich, solange die Seite offen bleibt.)', confirmLabel: 'Alles löschen', danger: true })) {
+    if (await confirm({ title: 'Alles löschen?', message: 'Spieler, Teams und beide Turniere werden komplett gelöscht. (Rückgängig ist möglich, solange die Seite offen bleibt.)', confirmLabel: 'Alles löschen', danger: true })) {
       commit(S.initialState, 'Alles gelöscht')
       setShowSettings(false)
       setTab('players')
@@ -133,25 +190,31 @@ function Main() {
       const next = S.parseState(JSON.parse(await file.text()))
       if (await confirm({ title: 'Backup importieren?', message: `Der aktuelle Stand wird durch „${file.name}“ ersetzt.`, confirmLabel: 'Importieren' })) {
         commit(next, 'Backup importiert')
-        setTab(next.tournament ? 'stats' : 'players')
+        setTab(next.tournaments[next.mode] ? 'stats' : 'players')
       }
     } catch (err) {
       await confirm({ title: 'Import fehlgeschlagen', message: err instanceof Error ? err.message : String(err), confirmLabel: 'OK' })
     }
   }
 
-  const done = tstate ? tstate.list.filter((s) => s.status === 'done').length : 0
-  // Gesamtzahl der zu spielenden Matches: ohne Freilose, Bracket Reset nur wenn er nötig ist
-  const byes = useMemo(() => (t ? structuralByes(t.bracket) : new Set<string>()), [t])
-  const total = tstate
-    ? tstate.list.filter((s) => !byes.has(s.match.id) && (s.match.id !== 'GF2' || s.status === 'ready' || s.status === 'done')).length
-    : 0
-  const champTeam = tstate?.champion ? state.teams.find((x) => x.id === tstate.champion) : undefined
-  const openSt = openMatch && tstate ? tstate.byId[openMatch] : null
+  // Fortschritt je Turnier: ohne Freilose, Bracket Reset nur wenn er nötig ist
+  const progress = (m: S.Mode) => {
+    const tt = state.tournaments[m]
+    const ts = tstates[m]
+    if (!tt || !ts) return null
+    const byes = structuralByes(tt.bracket)
+    const done = ts.list.filter((s) => s.status === 'done').length
+    const total = ts.list.filter((s) => !byes.has(s.match.id) && (s.match.id !== 'GF2' || s.status === 'ready' || s.status === 'done')).length
+    return { done, total, finished: ts.finished }
+  }
+
+  const champTeam = showWinner && tstates[showWinner]?.champion ? state.teams.find((x) => x.id === tstates[showWinner]!.champion) : undefined
+  const openT = openMatch ? state.tournaments[openMatch.mode] : null
+  const openSt = openMatch ? (tstates[openMatch.mode]?.byId[openMatch.id] ?? null) : null
 
   const tabs: { id: Tab; label: string }[] = [
     { id: 'players', label: 'Spieler' },
-    ...(state.mode === 'double' ? [{ id: 'teams' as Tab, label: 'Teams' }] : []),
+    ...(mode === 'double' ? [{ id: 'teams' as Tab, label: 'Teams' }] : []),
     { id: 'stats', label: 'Tabelle' },
   ]
   const activeTab = tabs.some((x) => x.id === tab) ? tab : 'players'
@@ -160,25 +223,51 @@ function Main() {
     <div className="flex h-full flex-col gap-4 p-4">
       {/* Kopfzeile */}
       <header className="flex items-center gap-4">
-        <h1 className="flex items-center gap-3 leading-none">
+        <h1 className="flex shrink-0 items-center gap-3 leading-none">
           <img src={`${import.meta.env.BASE_URL}tsv-logo.png`} alt="TSV Worphausen" className="h-14 w-auto drop-shadow" />
           <span className="flex flex-col">
             <span className="text-sm font-bold uppercase tracking-[0.25em] text-wb">TSV Worphausen</span>
-            <span className="font-display whitespace-nowrap text-5xl">
+            <span className="font-display whitespace-nowrap text-[44px]">
               <span className="text-beer">Bierpong</span> <span className="text-text">Turnier</span>
             </span>
           </span>
         </h1>
-        {t && (
-          <div className="ml-4 flex items-center gap-3 text-xl text-muted">
-            <div className="h-3 w-48 overflow-hidden rounded-full bg-panel-2">
-              <div className="h-full rounded-full bg-beer transition-all" style={{ width: `${total ? (done / total) * 100 : 0}%` }} />
-            </div>
-            <span className="font-semibold">
-              {done}/{total} Matches
-            </span>
-          </div>
-        )}
+
+        {/* Umschalter Doppel / Einzel */}
+        <nav className="ml-6 flex shrink-0 gap-1 rounded-2xl border border-line bg-bg/60 p-1">
+          {S.MODES.map((m) => {
+            const p = progress(m)
+            const active = m === mode
+            return (
+              <button
+                key={m}
+                onClick={() => switchMode(m)}
+                className={`flex min-w-40 flex-col items-start rounded-xl px-4 py-1.5 text-left transition ${active ? 'bg-club text-white' : 'text-muted hover:bg-panel-2 hover:text-text'}`}
+              >
+                <span className="text-2xl font-extrabold leading-tight">{S.MODE_LABEL[m]}</span>
+                <span className="flex w-full items-center gap-2 text-sm font-semibold">
+                  {p ? (
+                    p.finished ? (
+                      <span>🏆 beendet</span>
+                    ) : (
+                      <>
+                        <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-black/30">
+                          <span className="block h-full rounded-full bg-beer" style={{ width: `${p.total ? (p.done / p.total) * 100 : 0}%` }} />
+                        </span>
+                        <span>
+                          {p.done}/{p.total}
+                        </span>
+                      </>
+                    )
+                  ) : (
+                    <span>Vorbereitung</span>
+                  )}
+                </span>
+              </button>
+            )
+          })}
+        </nav>
+
         <div className="ml-auto flex items-center gap-2">
           {!presentation && (
             <>
@@ -188,7 +277,7 @@ function Main() {
               {t && (
                 <>
                   <button className="btn" onClick={resetTournament}>
-                    Turnier zurücksetzen
+                    {label} zurücksetzen
                   </button>
                   <button className="btn btn-danger" onClick={newTournament}>
                     Neu erstellen
@@ -231,8 +320,8 @@ function Main() {
               </button>
             </nav>
             <div className="min-h-0 flex-1">
-              {activeTab === 'players' && <PlayersPanel store={store} locked={locked} />}
-              {activeTab === 'teams' && <TeamsPanel store={store} draw={draw} locked={locked} />}
+              {activeTab === 'players' && <PlayersPanel store={store} />}
+              {activeTab === 'teams' && <TeamsPanel store={store} draw={draw} locked={state.tournaments.double !== null} />}
               {activeTab === 'stats' && <StatsPanel state={state} stats={stats} />}
             </div>
           </aside>
@@ -242,12 +331,13 @@ function Main() {
         <main className="panel min-w-0 flex-1 overflow-hidden">
           {t && tstate ? (
             <BracketView
+              key={mode}
               bracket={t.bracket}
               state={tstate}
               name={name}
-              onOpen={setOpenMatch}
-              nowId={ready[0]?.match.id ?? null}
-              nextIds={new Set(ready.slice(1, 3).map((s) => s.match.id))}
+              onOpen={(id) => setOpenMatch({ mode, id })}
+              tableOf={tableOf}
+              nextIds={nextIds}
               highlightPath={path}
               fitKey={`${presentation}-${collapsed}-${state.settings.grandFinalReset}`}
               showReset={state.settings.grandFinalReset}
@@ -258,43 +348,45 @@ function Main() {
           )}
         </main>
 
-        {/* Rechts: Als Nächstes */}
-        {t && tstate && (
+        {/* Rechts: Tische und Als Nächstes (beide Turniere) */}
+        {anyRunning && (
           <aside className={`shrink-0 ${presentation ? 'w-[520px]' : 'w-[400px]'}`}>
             <UpNext
-              bracket={t.bracket}
-              ready={ready}
-              waiting={waiting}
-              champion={tstate.champion}
+              tables={tableItems}
+              queue={queue}
+              champions={champions}
+              showMode={bothRunning}
               name={name}
-              onOpen={setOpenMatch}
-              onShowWinner={() => setShowWinner(true)}
+              onOpen={(m, id) => setOpenMatch({ mode: m, id })}
+              onShowWinner={setShowWinner}
               big={presentation}
             />
           </aside>
         )}
       </div>
 
-      {t && (
+      {openMatch && openT && (
         <MatchModal
           st={openSt}
-          bracket={t.bracket}
-          results={t.results}
+          bracket={openT.bracket}
+          results={openT.results}
           opts={S.options(state)}
           name={name}
           onClose={() => setOpenMatch(null)}
-          onSave={(results, label) => {
-            resultSaved.current = true
-            commit((s) => S.withResults(s, results), label)
+          onSave={(results, lbl) => {
+            const m = openMatch.mode
+            resultSaved.current = m
+            commit((s) => S.withResults(s, results, m), `${S.MODE_LABEL[m]}: ${lbl}`)
           }}
         />
       )}
 
-      {showWinner && tstate?.champion && (
+      {showWinner && tstates[showWinner]?.champion && (
         <WinnerOverlay
-          name={name(tstate.champion)}
-          members={champTeam && !champTeam.customName ? undefined : champTeam?.playerIds.map((id) => state.players.find((p) => p.id === id)?.name).join(' & ')}
-          onClose={() => setShowWinner(false)}
+          title={bothRunning ? `${S.MODE_LABEL[showWinner]}-Sieger` : 'Turniersieger'}
+          name={name(tstates[showWinner]!.champion)}
+          members={champTeam?.customName ? champTeam.playerIds.map((id) => state.players.find((p) => p.id === id)?.name).join(' & ') : undefined}
+          onClose={() => setShowWinner(null)}
         />
       )}
 
@@ -302,7 +394,8 @@ function Main() {
         <h2 className="font-display text-5xl text-beer">Menü</h2>
         <div className="mt-6 space-y-6 text-lg">
           <section className="space-y-3">
-            <h3 className="font-bold text-muted">Turnier-Einstellungen</h3>
+            <h3 className="font-bold text-muted">Turnier-Einstellungen (Einzel und Doppel)</h3>
+            <TablesSelect store={store} />
             <label className="flex cursor-pointer items-center gap-3">
               <input
                 type="checkbox"
@@ -310,7 +403,7 @@ function Main() {
                 checked={state.settings.grandFinalReset}
                 onChange={async (e) => {
                   const on = e.target.checked
-                  if (!on && tstate && tstate.byId.GF2.status === 'done') {
+                  if (!on && S.MODES.some((m) => tstates[m]?.byId.GF2.status === 'done')) {
                     const ok = await confirm({ title: 'Bracket Reset abschalten?', message: 'Das bereits eingetragene zweite Finale wird dadurch gelöscht.', confirmLabel: 'Abschalten', danger: true })
                     if (!ok) return
                   }
@@ -323,14 +416,13 @@ function Main() {
               <span>Erstrunden-Paarungen</span>
               <select
                 className="input w-auto py-2"
-                disabled={locked}
                 value={state.settings.seeding}
                 onChange={(e) => commit((s) => S.updateSettings(s, { seeding: e.target.value as S.Settings['seeding'] }), 'Einstellung geändert')}
               >
                 <option value="random">per Zufall</option>
                 <option value="order">nach Reihenfolge (Setzliste)</option>
               </select>
-              {locked && <span className="text-sm text-muted">(gilt beim nächsten Turnier)</span>}
+              {anyRunning && <span className="text-sm text-muted">(gilt beim nächsten Start)</span>}
             </label>
           </section>
           <section className="space-y-3">

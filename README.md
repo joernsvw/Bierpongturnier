@@ -2,7 +2,10 @@
 
 Kleine Web-App für Bierpong-Turniere in der Mannschaft – gebaut für Laptop + Fernseher (Bildschirmspiegelung, 1920×1080).
 
-- **Einzel oder Doppel**, Team-Auslosung mit zwei Glücksrädern (auch „alle auf einmal“ oder Teams von Hand)
+- **Einzel und Doppel – auch gleichzeitig**: gemeinsame Spielerliste, zwei unabhängige Turnierbäume (Umschalter oben)
+- **Mehrere Tische** (1–4, Standard 2): Laufende Matches bleiben an ihrem Tisch, freie Tische bekommen das nächste Match. Niemand wird gleichzeitig an zwei Tische gesetzt, und beide Turniere kommen abwechselnd dran
+- Team-Auslosung mit zwei Glücksrädern (auch „alle auf einmal“ oder Teams von Hand)
+- Fortlaufende Spielnummern in Spielreihenfolge („Spiel 1 … Finale“), Freilose werden nicht mitgezählt
 - **Double Elimination** wie im E-Sport: Winner Bracket, Loser Bracket, Grand Final mit optionalem Bracket Reset
 - Freilose bei ungerader Teilnehmerzahl werden automatisch verteilt und weitergeleitet
 - Ergebnisse per Klick eintragen (optional mit verbleibenden Bechern), korrigierbar mit Warnung für abhängige Matches
@@ -51,5 +54,6 @@ Hinweis: Die Turnierdaten liegen auch online nur im Browser des jeweiligen Gerä
 
 - `src/lib/bracket.ts` – UI-unabhängige Double-Elimination-Logik (Generierung, Freilose, Weiterleitung, Loser-Bracket-Zuordnung, Grand Final/Reset, Statistik)
 - `src/lib/bracket.test.ts` – Tests für 2, 3, 4, 5, 6, 8, 12 und 16 Teams
-- `src/lib/state.ts` – App-Zustand, Speichern/Laden, Spieler- und Team-Aktionen
+- `src/lib/tables.ts` – Verteilung der Matches auf die Tische (mit Tests)
+- `src/lib/state.ts` – App-Zustand (Einzel + Doppel), Speichern/Laden, Spieler- und Team-Aktionen
 - `src/components/` – Oberfläche (Turnierbaum, Ergebnis-Fenster, Glücksräder, Tabellen …)

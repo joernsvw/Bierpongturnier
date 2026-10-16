@@ -93,14 +93,28 @@ export function SetupStage({ store, draw }: { store: Store; draw: Draw }) {
       ) : (
         <>
           <h2 className="font-display text-7xl leading-none text-beer">Einzel-Turnier</h2>
-          <p className="mt-2 text-xl text-muted">Jeder Spieler tritt für sich an.</p>
+          <p className="mt-2 text-xl text-muted">Jeder Spieler tritt für sich an. Antippen nimmt jemanden aus dem Einzel heraus.</p>
           <div className="mt-8 flex max-w-5xl flex-wrap justify-center gap-3">
-            {state.players.map((p) => (
-              <span key={p.id} className="rounded-2xl border-2 border-line bg-panel-2 px-5 py-2 text-3xl font-bold">
-                {p.name}
-              </span>
-            ))}
+            {state.players.map((p) => {
+              const out = state.singleOut.includes(p.id)
+              return (
+                <button
+                  key={p.id}
+                  onClick={() => commit((s) => S.toggleSingleOut(s, p.id), 'Einzel-Teilnahme geändert')}
+                  className={`rounded-2xl border-2 px-5 py-2 text-3xl font-bold transition ${
+                    out ? 'border-dashed border-line text-muted line-through' : 'border-wb/60 bg-panel-2 hover:border-beer'
+                  }`}
+                >
+                  {p.name}
+                </button>
+              )
+            })}
           </div>
+          {state.tournaments.double && (
+            <p className="mt-6 max-w-3xl text-center text-lg text-muted">
+              Das Doppel läuft parallel. Die Tische werden gemeinsam genutzt, und niemand wird gleichzeitig an zwei Tische gesetzt.
+            </p>
+          )}
         </>
       )}
 
@@ -127,6 +141,7 @@ export function SetupStage({ store, draw }: { store: Store; draw: Draw }) {
             />
             <span>Bracket Reset im Grand Final</span>
           </label>
+          <TablesSelect store={store} />
           <button className="btn btn-primary ml-auto px-8 py-3 text-2xl" disabled={entrants.length < 2 || draw.spinning} onClick={start}>
             Turnier starten ({entrants.length})
           </button>
@@ -136,6 +151,27 @@ export function SetupStage({ store, draw }: { store: Store; draw: Draw }) {
             Reihenfolge = Setzliste: Platz 1 spielt gegen den letzten Platz, Freilose gehen an die vorderen Plätze.
           </p>
         )}
+      </div>
+    </div>
+  )
+}
+
+/** Anzahl Tische (gilt für beide Turniere zusammen) */
+export function TablesSelect({ store }: { store: Store }) {
+  const { state, commit } = store
+  return (
+    <div className="flex items-center gap-3 text-lg">
+      <span className="text-muted">Tische</span>
+      <div className="flex rounded-xl border border-line bg-bg/60 p-1">
+        {Array.from({ length: S.MAX_TABLES }, (_, i) => i + 1).map((n) => (
+          <button
+            key={n}
+            onClick={() => commit((s) => S.updateSettings(s, { tables: n }), `${n} Tisch${n > 1 ? 'e' : ''}`)}
+            className={`h-10 w-10 rounded-lg text-xl font-bold transition ${state.settings.tables === n ? 'bg-club text-white' : 'text-muted hover:text-text'}`}
+          >
+            {n}
+          </button>
+        ))}
       </div>
     </div>
   )

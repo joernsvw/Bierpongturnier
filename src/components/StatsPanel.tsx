@@ -18,7 +18,8 @@ interface Row {
 }
 
 export function StatsPanel({ state, stats }: { state: AppState; stats: Record<string, EntrantStats> | null }) {
-  const t = state.tournament
+  const t = state.tournaments[state.mode]
+  const mode = state.mode
   if (!t || !stats) {
     return <p className="rounded-xl border border-dashed border-line p-5 text-center text-lg text-muted">Die Tabelle erscheint, sobald das Turnier gestartet ist.</p>
   }
@@ -36,7 +37,7 @@ export function StatsPanel({ state, stats }: { state: AppState; stats: Record<st
 
   let entrantRows: Row[]
   let playerRows: Row[] = []
-  if (t.mode === 'double') {
+  if (mode === 'double') {
     entrantRows = state.teams
       .filter((team) => stats[team.id])
       .map((team) => ({ id: team.id, name: team.name, s: stats[team.id] }))
@@ -49,8 +50,8 @@ export function StatsPanel({ state, stats }: { state: AppState; stats: Record<st
 
   return (
     <div className="-mr-2 h-full space-y-6 overflow-y-auto pr-2">
-      <Table title={t.mode === 'double' ? 'Teams' : 'Spieler'} rows={sort(entrantRows)} />
-      {t.mode === 'double' && <Table title="Spieler" rows={sort(playerRows)} showSub />}
+      <Table title={mode === 'double' ? 'Doppel-Teams' : 'Einzel'} rows={sort(entrantRows)} />
+      {mode === 'double' && <Table title="Spieler" rows={sort(playerRows)} showSub />}
     </div>
   )
 }
