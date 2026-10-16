@@ -1,4 +1,4 @@
-import { BYE, type Bracket, type MatchState, describeSource, roundName, structuralByes } from '../lib/bracket'
+import { BYE, type Bracket, EXTRA_FINAL_CUPS, GF2, type MatchState, describeSource, roundName, structuralByes } from '../lib/bracket'
 import { MODE_LABEL, type Mode } from '../lib/state'
 
 /** Ein Match mit Bezug zu seinem Turnier (es können zwei parallel laufen) */
@@ -59,7 +59,11 @@ export function UpNext({ tables, queue, champions, showMode, name, onOpen, onSho
   const meta = (it: MatchItem) => (
     <span className="truncate" style={{ color: sideColor[it.st.match.side] }}>
       {showMode && <span className="text-text">{MODE_LABEL[it.mode]} · </span>}
-      {it.st.match.label} · {roundName(it.bracket, it.st.match.side, it.st.match.round)}
+      {it.st.match.side === 'GF'
+        ? it.st.match.id === GF2
+          ? `Extra-Finale ${EXTRA_FINAL_CUPS}:${EXTRA_FINAL_CUPS}`
+          : 'Grand Final'
+        : `${it.st.match.label} · ${roundName(it.bracket, it.st.match.side, it.st.match.round)}`}
     </span>
   )
   // Bei mehreren Tischen weniger Platz für die Warteschlange

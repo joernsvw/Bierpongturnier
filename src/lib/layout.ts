@@ -1,4 +1,4 @@
-import { type Bracket, type Match, type Side, GF1, GF2, roundName } from './bracket'
+import { type Bracket, type Match, type Side, EXTRA_FINAL_CUPS, GF1, GF2, roundName } from './bracket'
 
 export const MATCH_W = 290
 export const MATCH_H = 116
@@ -97,7 +97,7 @@ export function layoutBracket(bracket: Bracket, hidden: Set<string>): BracketLay
     if (m) headers.push({ x: pos[m.id].x, y: lbTop - 46, text: roundName(bracket, 'L', r), side: 'L' })
   }
   headers.push({ x: pos[GF1].x, y: gfY - 46, text: 'Grand Final', side: 'GF' })
-  if (!hidden.has(GF2)) headers.push({ x: pos[GF2].x, y: gfY - 46, text: 'Bracket Reset', side: 'GF' })
+  if (!hidden.has(GF2)) headers.push({ x: pos[GF2].x, y: gfY - 46, text: `Extra-Finale · ${EXTRA_FINAL_CUPS} Cups`, side: 'GF' })
 
   const sections = [{ side: 'W' as Side, y: 0, title: 'Winner Bracket' }]
   if (bracket.lbRounds > 0) sections.push({ side: 'L', y: lbTop - 46 - HEADER_H, title: 'Loser Bracket' })

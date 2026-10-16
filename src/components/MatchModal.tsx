@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { type Bracket, type MatchState, type Options, type Results, clearResult, roundName, setResult } from '../lib/bracket'
+import { type Bracket, type MatchState, type Options, type Results, EXTRA_FINAL_CUPS, GF2, clearResult, roundName, setResult } from '../lib/bracket'
 import { Modal, useConfirm } from './Modal'
 
 interface Props {
@@ -12,7 +12,7 @@ interface Props {
   onSave: (results: Results, label: string) => void
 }
 
-const CUPS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+const cupsFor = (matchId: string) => Array.from({ length: matchId === GF2 ? EXTRA_FINAL_CUPS : 10 }, (_, i) => i + 1)
 
 export function MatchModal({ st, bracket, results, opts, name, onClose, onSave }: Props) {
   const confirm = useConfirm()
@@ -108,6 +108,11 @@ export function MatchModal({ st, bracket, results, opts, name, onClose, onSave }
           {st.match.label} · {roundName(bracket, st.match.side, st.match.round)}
         </span>
       </div>
+      {st.match.id === GF2 && (
+        <div className="mt-4 rounded-2xl border-2 border-beer bg-beer/10 px-5 py-3 text-2xl font-bold text-beer">
+          🍺 Extra-Finale: {EXTRA_FINAL_CUPS} gegen {EXTRA_FINAL_CUPS} Becher
+        </div>
+      )}
       <p className="mt-2 text-xl text-muted">Wer hat gewonnen?</p>
 
       <div className="mt-6 flex items-stretch gap-6">
@@ -121,7 +126,7 @@ export function MatchModal({ st, bracket, results, opts, name, onClose, onSave }
           Verbleibende Becher des Siegers <span className="text-base">(optional)</span>
         </p>
         <div className="mt-3 flex flex-wrap gap-2">
-          {CUPS.map((c) => (
+          {cupsFor(st.match.id).map((c) => (
             <button
               key={c}
               onClick={() => setCups(cups === c ? undefined : c)}

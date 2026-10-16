@@ -86,6 +86,9 @@ export interface TournamentState {
 export const GF1 = 'GF1'
 export const GF2 = 'GF2'
 
+/** Das Extra-Finale (Bracket Reset) wird mit 6 gegen 6 Bechern gespielt */
+export const EXTRA_FINAL_CUPS = 6
+
 // ---------------------------------------------------------------------------
 // Generierung
 // ---------------------------------------------------------------------------
@@ -256,7 +259,7 @@ export function labelMatches(bracket: Bracket): Bracket {
   let nr = 0
   for (const m of [...bracket.matches].sort(compareMatches)) {
     if (m.id === GF1) m.label = 'Finale'
-    else if (m.id === GF2) m.label = 'Finale 2'
+    else if (m.id === GF2) m.label = 'Extra-Finale'
     else m.label = byes.has(m.id) ? 'Freilos' : `Spiel ${++nr}`
   }
   return bracket
@@ -520,7 +523,7 @@ export function winningPath(state: TournamentState, entrant: string): Set<string
 }
 
 export function roundName(bracket: Bracket, side: Side, round: number): string {
-  if (side === 'GF') return round === 1 ? 'Grand Final' : 'Bracket Reset'
+  if (side === 'GF') return round === 1 ? 'Grand Final' : `${EXTRA_FINAL_CUPS} gegen ${EXTRA_FINAL_CUPS}`
   if (side === 'W') {
     const fromEnd = bracket.wbRounds - round
     if (fromEnd === 0) return 'WB-Finale'

@@ -139,7 +139,7 @@ export function SetupStage({ store, draw }: { store: Store; draw: Draw }) {
               checked={state.settings.grandFinalReset}
               onChange={(e) => commit((s) => S.updateSettings(s, { grandFinalReset: e.target.checked }), 'Einstellung geändert')}
             />
-            <span>Bracket Reset im Grand Final</span>
+            <span>Extra-Finale 6 gegen 6 Cups</span>
           </label>
           <TablesSelect store={store} />
           <button className="btn btn-primary ml-auto px-8 py-3 text-2xl" disabled={entrants.length < 2 || draw.spinning} onClick={start}>

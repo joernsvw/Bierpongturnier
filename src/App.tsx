@@ -197,7 +197,7 @@ function Main() {
     }
   }
 
-  // Fortschritt je Turnier: ohne Freilose, Bracket Reset nur wenn er nötig ist
+  // Fortschritt je Turnier: ohne Freilose, Extra-Finale nur wenn es nötig ist
   const progress = (m: S.Mode) => {
     const tt = state.tournaments[m]
     const ts = tstates[m]
@@ -404,13 +404,13 @@ function Main() {
                 onChange={async (e) => {
                   const on = e.target.checked
                   if (!on && S.MODES.some((m) => tstates[m]?.byId.GF2.status === 'done')) {
-                    const ok = await confirm({ title: 'Bracket Reset abschalten?', message: 'Das bereits eingetragene zweite Finale wird dadurch gelöscht.', confirmLabel: 'Abschalten', danger: true })
+                    const ok = await confirm({ title: 'Extra-Finale abschalten?', message: 'Das bereits eingetragene Extra-Finale wird dadurch gelöscht.', confirmLabel: 'Abschalten', danger: true })
                     if (!ok) return
                   }
                   commit((s) => S.updateSettings(s, { grandFinalReset: on }), 'Einstellung geändert')
                 }}
               />
-              <span>Bracket Reset (zweites Finale, wenn der Loser-Bracket-Sieger das Grand Final gewinnt)</span>
+              <span>Extra-Finale mit 6 gegen 6 Cups, wenn der Loser-Bracket-Sieger das Grand Final gewinnt (Bracket Reset)</span>
             </label>
             <label className="flex items-center gap-3">
               <span>Erstrunden-Paarungen</span>

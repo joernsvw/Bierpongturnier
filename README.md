@@ -6,7 +6,7 @@ Kleine Web-App für Bierpong-Turniere in der Mannschaft – gebaut für Laptop +
 - **Mehrere Tische** (1–4, Standard 2): Laufende Matches bleiben an ihrem Tisch, freie Tische bekommen das nächste Match. Niemand wird gleichzeitig an zwei Tische gesetzt, und beide Turniere kommen abwechselnd dran
 - Team-Auslosung mit zwei Glücksrädern (auch „alle auf einmal“ oder Teams von Hand)
 - Fortlaufende Spielnummern in Spielreihenfolge („Spiel 1 … Finale“), Freilose werden nicht mitgezählt
-- **Double Elimination** wie im E-Sport: Winner Bracket, Loser Bracket, Grand Final mit optionalem Bracket Reset
+- **Double Elimination** wie im E-Sport: Winner Bracket, Loser Bracket, Grand Final; gewinnt der Loser-Bracket-Sieger, folgt ein Extra-Finale mit 6 gegen 6 Cups (abschaltbar)
 - Freilose bei ungerader Teilnehmerzahl werden automatisch verteilt und weitergeleitet
 - Ergebnisse per Klick eintragen (optional mit verbleibenden Bechern), korrigierbar mit Warnung für abhängige Matches
 - „Als Nächstes“-Leiste, Tabelle mit Siegen/Niederlagen/Becherdifferenz, Siegerehrung mit Konfetti
