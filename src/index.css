@@ -1,0 +1,99 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", "Segoe UI", system-ui, sans-serif;
+  --font-display: "Bebas Neue", "Impact", "Arial Narrow Bold", sans-serif;
+
+  /* Vereinsfarben TSV Worphausen: Grün-Weiß mit goldenem Wappenrand */
+  --color-club: #0d7e35;
+  --color-club-hover: #11963f;
+  --color-on-gold: #1b1500;
+
+  --color-bg: #03130a;
+  --color-panel: #08241a;
+  --color-panel-2: #0f3322;
+  --color-line: #245339;
+  --color-muted: #9dbaa8;
+  --color-text: #f3faf5;
+
+  --color-beer: #f5c242; /* Gold – Hervorhebungen */
+  --color-cup: #ef4444;
+  --color-wb: #4cd17f; /* Winner Bracket: helles Vereinsgrün */
+  --color-lb: #e3eee7; /* Loser Bracket: Weiß */
+  --color-win: #5ee08f;
+}
+
+html {
+  /* Basis-Schrift für Fernseher aus mehreren Metern */
+  font-size: 18px;
+}
+@media (min-width: 1800px) {
+  html { font-size: 20px; }
+}
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background:
+    radial-gradient(1200px 600px at 10% -10%, rgba(13, 126, 53, 0.35), transparent 60%),
+    radial-gradient(1000px 600px at 110% 110%, rgba(245, 194, 66, 0.08), transparent 60%),
+    var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+.font-display {
+  font-family: var(--font-display);
+  letter-spacing: 0.04em;
+}
+
+/* Schlanke Scrollbars passend zum dunklen Theme */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-line) transparent;
+}
+
+@keyframes pulse-ring {
+  0%, 100% { box-shadow: 0 0 0 3px rgba(245, 194, 66, 0.95), 0 0 28px rgba(245, 194, 66, 0.45); }
+  50% { box-shadow: 0 0 0 3px rgba(245, 194, 66, 0.5), 0 0 8px rgba(245, 194, 66, 0.15); }
+}
+.pulse-ring { animation: pulse-ring 1.6s ease-in-out infinite; }
+
+@keyframes pop-in {
+  from { transform: scale(0.85); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+.pop-in { animation: pop-in 0.35s cubic-bezier(0.2, 1.4, 0.4, 1) both; }
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.fade-in { animation: fade-in 0.2s ease-out both; }
+
+.btn {
+  @apply inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl px-4 py-2.5 font-semibold transition
+    bg-panel-2 text-text border border-line hover:border-beer/70 hover:bg-[#164229]
+    disabled:opacity-40 disabled:pointer-events-none select-none;
+}
+.btn-primary {
+  @apply bg-club text-white border-club hover:bg-club-hover hover:border-beer;
+}
+.btn-danger {
+  @apply bg-cup/15 text-[#ff8a8a] border-cup/50 hover:bg-cup/25 hover:border-cup;
+}
+.btn-ghost {
+  @apply bg-transparent border-transparent hover:bg-panel-2 hover:border-line;
+}
+.input {
+  @apply w-full rounded-xl bg-bg/70 border border-line px-4 py-2.5 text-text placeholder:text-muted/70
+    outline-none focus:border-beer focus:ring-2 focus:ring-beer/30;
+}
+.panel {
+  @apply rounded-2xl bg-panel/90 border border-line/70 backdrop-blur;
+}
